@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>e621 Tag Extractor Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #002d55; /* e621 dark blue theme base */
+            color: #e9f2fa;
+        }
+        .e621-card {
+            background-color: #1f3c67;
+            border: 1px solid #2e76b4;
+        }
+        .tag-pill {
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .tag-pill:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+        .tag-pill.copied {
+            background-color: #4ade80 !important;
+            color: #064e3b !important;
+            border-color: #22c55e !important;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #002d55;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2e76b4;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #61a6e2;
+        }
+        /* Select Dropdown styling */
+        select {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        /* Modal Backdrop */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+        }
+        .image-preview-container {
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #001f3f;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            margin-bottom: 1rem;
+            border: 1px solid #2e76b4;
+        }
+        .image-preview-container img {
+            max-height: 400px;
+            width: auto;
+            max-width: 100%;
+            object-fit: contain;
+        }
+        /* Toast styles */
+        .toast-error {
+            background-color: #991b1b !important; /* red-800 */
+        }
+        .char-thumb {
+            width: 40px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #2e76b4;
+            background-color: #000;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 relative">
+
+    <!-- Settings Button (Top Right Corner) -->
+    <button onclick="openSettings()" class="absolute top-4 right-4 text-gray-400 hover:text-white transition p-2 z-10" title="Filter Settings">
+        <i class="fas fa-cog fa-2x"></i>
+    </button>
+
+    <!-- Main Container -->
+    <div class="w-full max-w-4xl e621-card rounded-xl shadow-2xl p-6 md:p-8 relative z-10" style="margin-top: 180px;">
+        
+        <!-- Tiger Banner (Positioned Above Card) -->
+        <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-0 w-full max-w-2xl">
+            <img src="asset/tiger_banner.png" alt="Tiger Banner" class="w-full h-auto" style="object-fit: contain;">
+        </div>
+        
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-yellow-400 mb-2">
+                <i class="fas fa-paw mr-2"></i>General Tag Extractor
+            </h1>
+            <p class="text-gray-300 text-sm md:text-base">
+                Enter e621 URL → Get Clean Tags + Character Prompt.
+            </p>
+        </div>
+
+        <!-- Input Section -->
+        <div class="flex flex-col md:flex-row gap-3 mb-6">
+            <div class="relative flex-grow">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i class="fas fa-link text-gray-400"></i>
+                </div>
+                <input type="text" id="urlInput" 
+                    placeholder="https://e621.net/posts/(ID)" 
+                    class="w-full pl-10 pr-4 py-3 rounded-lg bg-[#002d55] border border-[#2e76b4] text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent transition">
+            </div>
+            <button onclick="fetchTags()" 
+                class="bg-yellow-500 hover:bg-yellow-400 text-[#002d55] font-bold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center gap-2 shadow-lg active:transform active:scale-95">
+                <i class="fas fa-search"></i> Extract
+            </button>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="hidden mb-4 p-4 bg-red-900/50 border border-red-500 rounded-lg text-red-200 text-sm flex items-center gap-2">
+            <i class="fas fa-exclamation-circle"></i> <span id="errorText">An error occurred.</span>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div id="loadingSpinner" class="hidden flex justify-center items-center py-10">
+            <i class="fas fa-circle-notch fa-spin text-4xl text-yellow-400"></i>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsArea" class="hidden flex flex-col md:flex-row gap-6">
+            
+            <!-- Left Column: Image -->
+            <div class="w-full md:w-1/3 flex flex-col">
+                 <div class="image-preview-container bg-black/20">
+                    <img id="postImage" src="" alt="Post Preview" class="hidden">
+                    <div id="imagePlaceholder" class="text-gray-500 text-sm">Image Preview</div>
+                 </div>
+                 <div class="text-xs text-center text-gray-400 mb-4">
+                    Post ID: <span id="postIdDisplay" class="font-mono text-yellow-400">---</span>
+                 </div>
+
+                 <!-- SELECTED CHARACTER CARD -->
+                 <div id="characterInfoCard" class="hidden bg-[#001f3f] p-3 rounded-xl border border-[#2e76b4] shadow-md">
+                    <h3 class="text-xs font-bold text-yellow-400 uppercase mb-2 text-center">Selected Character</h3>
+                    
+                    <!-- Character Image -->
+                    <div id="charImagePreview" class="w-full h-32 mb-3 bg-black/30 rounded flex items-center justify-center overflow-hidden">
+                         <!-- Image will be inserted here -->
+                    </div>
+                    
+                    <p id="charNameDisplay" class="text-sm font-semibold mb-3 text-center text-white">---</p>
+                    
+                    <!-- Reference Button -->
+                    <button id="charRefButton" onclick="openCharacterReference()" 
+                            class="hidden w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2 rounded-lg text-sm transition duration-200 flex items-center justify-center gap-2 shadow-lg active:transform active:scale-95">
+                        <i class="fas fa-book"></i> Reference Link
+                    </button>
+                 </div>
+            </div>
+
+            <!-- Right Column: Controls and Tags -->
+            <div class="w-full md:w-2/3 flex flex-col">
+                
+                <div class="flex items-center justify-between mb-2">
+                    <div class="text-sm text-gray-300">
+                        Total clean tags found: <span id="tagCount" class="font-bold text-white">0</span>
+                    </div>
+                </div>
+
+                <!-- Character Selection Row -->
+                <div class="mb-4 bg-[#001f3f] p-3 rounded-lg border border-[#2e76b4]">
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-xs font-bold text-gray-400 uppercase">
+                            Character Preset (<span id="modeIndicator" class="text-yellow-400">Solo</span> Mode)
+                        </label>
+                        <button onclick="openCharManager()" class="text-xs text-blue-300 hover:text-white hover:underline">
+                            <i class="fas fa-users-cog"></i> Manage Characters
+                        </button>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        <select id="characterSelect" class="flex-grow bg-[#1f3c67] text-white border border-[#2e76b4] rounded p-2 focus:outline-none focus:border-yellow-400" onchange="updateCharacterDisplay()">
+                            <!-- Options filled by JS -->
+                        </select>
+                    </div>
+                    
+                    <p id="duoMessage" class="hidden text-xs text-yellow-400 mt-2 flex items-start gap-1">
+                        <i class="fas fa-info-circle mt-0.5"></i> <span>Tag <b>"duo"</b> detected. Switched to Duo presets.</span>
+                    </p>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button onclick="copyAllTags()" class="text-sm bg-[#2e76b4] hover:bg-[#61a6e2] text-white font-semibold py-3 px-4 rounded-lg hover:shadow-lg transition flex-grow flex items-center justify-center gap-2">
+                        <i class="fas fa-copy"></i> Copy Full Prompt
+                    </button>
+                    <button onclick="clearResults()" class="text-sm bg-gray-700 hover:bg-gray-600 text-gray-200 py-3 px-4 rounded-lg hover:shadow transition" title="Clear Results">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+
+                <!-- Tags Container -->
+                <div id="tagsContainer" class="flex flex-wrap gap-2 max-h-[300px] overflow-y-auto p-2 bg-[#001f3f] rounded-lg border border-[#2e76b4] shadow-inner flex-grow">
+                    <!-- Tags will be inserted here -->
+                </div>
+                
+                <p class="text-xs text-gray-500 mt-2 text-center">Click on a tag to copy individual words.</p>
+            </div>
+        </div>
+
+        <!-- Footer / Credits -->
+        <div class="mt-8 text-center text-xs text-gray-500">
+            Powered by the public e621 API.
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL (Blacklist) -->
+    <div id="settingsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+        <div class="bg-[#1f3c67] border border-[#2e76b4] rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b border-[#2e76b4] flex justify-between items-center bg-[#002d55] rounded-t-xl">
+                <h2 class="text-xl font-bold text-yellow-400"><i class="fas fa-cog"></i> Filter Settings</h2>
+                <button onclick="closeSettings()" class="text-gray-400 hover:text-white transition">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-grow">
+                <!-- TAG CATEGORIES FILTER -->
+                <div class="mb-6 pb-6 border-b border-[#2e76b4]">
+                    <label class="block text-sm font-bold text-white mb-3">
+                        <i class="fas fa-filter"></i> Tag Categories
+                    </label>
+                    <p class="text-xs text-gray-300 mb-3">
+                        Select which tag categories to display:
+                    </p>
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-3 p-2 rounded hover:bg-[#1f3c67] cursor-pointer transition">
+                            <input type="checkbox" id="catGeneral" class="w-4 h-4 rounded border-[#2e76b4] cursor-pointer" checked>
+                            <span class="text-sm text-gray-200">General</span>
+                        </label>
+                        <label class="flex items-center gap-3 p-2 rounded hover:bg-[#1f3c67] cursor-pointer transition">
+                            <input type="checkbox" id="catArtists" class="w-4 h-4 rounded border-[#2e76b4] cursor-pointer" checked>
+                            <span class="text-sm text-gray-200">Artists</span>
+                        </label>
+                        <label class="flex items-center gap-3 p-2 rounded hover:bg-[#1f3c67] cursor-pointer transition">
+                            <input type="checkbox" id="catSpecies" class="w-4 h-4 rounded border-[#2e76b4] cursor-pointer" checked>
+                            <span class="text-sm text-gray-200">Species</span>
+                        </label>
+                        <label class="flex items-center gap-3 p-2 rounded hover:bg-[#1f3c67] cursor-pointer transition">
+                            <input type="checkbox" id="catMeta" class="w-4 h-4 rounded border-[#2e76b4] cursor-pointer" checked>
+                            <span class="text-sm text-gray-200">Meta</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- BLACKLIST SETTINGS -->
+                <label class="block text-sm font-bold text-white mb-2">
+                    Negative Tags / Blacklist
+                </label>
+                <p class="text-xs text-gray-300 mb-2">
+                    Enter words to hide from the results (comma-separated).
+                </p>
+                <textarea id="blacklistInput" class="w-full h-32 bg-[#001f3f] border border-[#2e76b4] text-gray-200 text-sm p-3 rounded focus:outline-none focus:ring-1 focus:ring-yellow-400" spellcheck="false"></textarea>
+                
+                <div class="flex justify-end mt-2">
+                    <button onclick="resetDefaultBlacklist()" class="text-xs text-blue-300 hover:text-white underline">
+                        Reset to Default Blacklist
+                    </button>
+                </div>
+                
+                <!-- Import / Export .mikus -->
+                <div class="mt-4 border-t border-[#2e76b4] pt-4">
+                    <label class="block text-sm font-bold text-white mb-2">Import / Export .mikus</label>
+                    <div class="flex gap-2 items-center">
+                        <div id="mikusDropzone" class="flex-1 p-3 rounded border-2 border-dashed border-[#2e76b4] bg-[#001f3f] text-sm text-gray-300 cursor-pointer text-center">
+                            <div id="mikusDropText">Drop or Choose file</div>
+                            <div id="mikusFileName" class="text-xs text-gray-400 mt-1"></div>
+                        </div>
+                        <input type="file" id="importMikusFile" accept=".mikus,.zip" class="hidden" />
+                        <button onclick="handleImportMikus()" class="text-xs bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded">Import</button>
+                        <button onclick="exportMikus()" class="text-xs bg-green-600 hover:bg-green-500 text-white px-3 py-2 rounded">Export .mikus</button>
+                    </div>
+                    <p class="text-xs text-gray-300 mt-2">The .mikus archive contains <code>negative.txt</code> and <code>characher.json</code> (images must be stored as data URLs inside JSON).</p>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-[#2e76b4] bg-[#002d55] rounded-b-xl flex justify-end gap-3">
+                <button onclick="closeSettings()" class="px-4 py-2 text-sm text-gray-300 hover:text-white transition">Cancel</button>
+                <button onclick="saveSettings()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded font-bold shadow transition">
+                    <i class="fas fa-save"></i> Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHARACTER MANAGEMENT MODAL -->
+    <div id="charModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-backdrop p-4">
+        <div class="bg-[#1f3c67] border border-[#2e76b4] rounded-xl shadow-2xl w-full max-w-xl flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b border-[#2e76b4] flex justify-between items-center bg-[#002d55] rounded-t-xl">
+                <h2 class="text-xl font-bold text-white"><i class="fas fa-users"></i> Character Management</h2>
+                <button onclick="closeCharManager()" class="text-gray-400 hover:text-white transition">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-grow">
+                <!-- New Character Form -->
+                <div id="charFormContainer" class="bg-[#001f3f] p-4 rounded-lg mb-6 border border-[#2e76b4]">
+                    <h3 id="formTitle" class="text-sm font-bold text-yellow-400 mb-3">Add New Character</h3>
+                    
+                    <div class="flex gap-4 mb-2">
+                        <div class="flex-grow">
+                            <label class="text-xs text-gray-400">Display Name</label>
+                            <input type="text" id="newCharName" placeholder="e.g. My Character" class="w-full bg-[#1f3c67] border border-[#2e76b4] text-white text-sm p-2 rounded mt-1">
+                        </div>
+                        <div class="w-1/3">
+                            <label class="text-xs text-gray-400">Type</label>
+                            <select id="newCharType" class="w-full bg-[#1f3c67] border border-[#2e76b4] text-white text-sm p-2 rounded mt-1">
+                                <option value="solo">Solo</option>
+                                <option value="duo">Duo</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="text-xs text-gray-400">Reference Link (Wiki/Source URL)</label>
+                        <input type="url" id="newCharUrl" placeholder="https://..." class="w-full bg-[#1f3c67] border border-[#2e76b4] text-white text-sm p-2 rounded mt-1">
+                    </div>
+
+                    <!-- IMAGE SECTION -->
+                    <div class="mb-3 border-t border-b border-[#2e76b4] py-3 my-3">
+                        <label class="text-xs text-gray-400 block mb-1">Character Image (Optional, Resized Auto)</label>
+                        <div class="flex flex-col gap-2">
+                            <!-- URL Input -->
+                            <input type="text" id="newCharImgUrl" placeholder="Image URL (example.com/image.png)" class="w-full bg-[#1f3c67] border border-[#2e76b4] text-white text-sm p-2 rounded">
+                            
+                            <div class="flex items-center gap-2 text-xs text-gray-400 my-1">
+                                <span class="flex-grow border-t border-gray-600"></span>
+                                <span>OR UPLOAD</span>
+                                <span class="flex-grow border-t border-gray-600"></span>
+                            </div>
+
+                            <!-- File Input (replaced with dropzone) -->
+                            <div id="newCharDropzone" class="w-full p-3 rounded border-2 border-dashed border-[#2e76b4] bg-[#001f3f] text-sm text-gray-300 cursor-pointer text-center">
+                                <div id="newCharDropText">Drop or Choose file</div>
+                                <div id="newCharFileName" class="text-xs text-gray-400 mt-1"></div>
+                            </div>
+                            <input type="file" id="newCharFile" accept="image/*" class="hidden" />
+                            
+                            <!-- Simple Form Preview -->
+                            <div id="formImgPreview" class="hidden mt-2 p-2 bg-black/20 rounded text-center">
+                                <p class="text-[10px] text-gray-400 mb-1">Preview:</p>
+                                <img src="" alt="Preview" class="h-20 mx-auto object-contain rounded border border-[#2e76b4]" crossorigin="anonymous" loading="lazy">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="text-xs text-gray-400">Prompt / Lora / Tags</label>
+                        <textarea id="newCharTags" placeholder="<lora:name:1>, 1boy, character tags..." class="w-full h-20 bg-[#1f3c67] border border-[#2e76b4] text-white text-sm p-2 rounded mt-1"></textarea>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        <button id="saveCharBtn" onclick="saveCharacter()" class="flex-grow bg-blue-600 hover:bg-blue-500 text-white py-2 rounded text-sm font-bold transition">
+                            <i class="fas fa-plus"></i> Add Character
+                        </button>
+                        <button id="cancelEditBtn" onclick="cancelEdit()" class="hidden bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded text-sm font-bold transition">
+                            Cancel Edit
+                        </button>
+                    </div>
+                </div>
+
+                <!-- List -->
+                <h3 class="text-sm font-bold text-white mb-2">Saved Characters</h3>
+                <div id="customCharList" class="space-y-2">
+                    <!-- Filled by JS -->
+                    <p class="text-xs text-gray-500 italic text-center py-2">No characters saved.</p>
+                </div>
+                
+                <div class="mt-4 text-right">
+                     <button onclick="resetCharactersToDefault()" class="text-xs text-red-400 hover:underline">Reset to Factory Defaults (Clear All)</button>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-[#2e76b4] bg-[#002d55] rounded-b-xl flex justify-end">
+                <button onclick="closeCharManager()" class="px-4 py-2 text-sm text-gray-300 hover:text-white transition">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-green-600 text-white px-6 py-3 rounded-lg shadow-xl transform translate-y-20 opacity-0 transition duration-300 z-50 flex items-center gap-2">
+        <i class="fas fa-check-circle"></i> <span id="toastMsg">Copied!</span>
+    </div>
+
+    <!-- AI Chat modal and features removed -->
+
+    <script>
+    // JSZip will be loaded dynamically when needed
+        // --- DATA & CONFIG ---
+
+        // As requested, the initial character list is empty.
+        const INITIAL_CHARACTERS = {}; 
+
+        // As requested, the default blacklist is empty.
+        const DEFAULT_BANNED_SUFFIXES = []; 
+
+        // Global State
+        let currentBannedList = [];
+        let savedCharacters = {}; 
+        let currentMode = 'solo'; // 'solo' or 'duo'
+        let editingCharId = null; // Track if we are editing
+        let enabledCategories = {
+            general: true,
+            artists: true,
+            species: true,
+            meta: true
+        };
+    // AI chat features removed
+
+        // --- INITIALIZATION ---
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+            loadCharacters();
+            updatePresetDropdown('solo'); 
+            
+            // Preview logic for file/url inputs
+            setupImagePreviewListeners();
+            // Initial call to set up character display based on default selection
+            updateCharacterDisplay(); 
+        });
+
+        function setupImagePreviewListeners() {
+            const urlInput = document.getElementById('newCharImgUrl');
+            const fileInput = document.getElementById('newCharFile');
+            const dropzone = document.getElementById('newCharDropzone');
+            const fileNameEl = document.getElementById('newCharFileName');
+            const previewBox = document.getElementById('formImgPreview');
+            const previewImg = previewBox.querySelector('img');
+
+            const updatePreview = (src) => {
+                if (src) {
+                    previewImg.src = src;
+                    previewImg.onerror = () => {
+                        previewBox.classList.add('hidden');
+                        console.warn('Image failed to load:', src);
+                    };
+                    previewImg.onload = () => {
+                        previewBox.classList.remove('hidden');
+                    };
+                } else {
+                    previewBox.classList.add('hidden');
+                    previewImg.src = '';
+                }
+            };
+
+            urlInput.addEventListener('input', (e) => {
+                if(e.target.value) {
+                    fileInput.value = ''; // Clear file if URL typed
+                    if (fileNameEl) fileNameEl.innerText = '';
+                    updatePreview(e.target.value);
+                } else {
+                    updatePreview('');
+                }
+            });
+
+            // Existing file input change handler (used by drop or file picker)
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    urlInput.value = ''; // Clear URL if file selected
+                    if (fileNameEl) fileNameEl.innerText = e.target.files[0].name;
+                    const reader = new FileReader();
+                    reader.onload = (e) => updatePreview(e.target.result);
+                    reader.readAsDataURL(e.target.files[0]);
+                }
+            });
+
+            // Dropzone wiring for character image
+            if (dropzone) {
+                dropzone.addEventListener('click', () => fileInput.click());
+
+                ['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dropzone.classList.add('border-yellow-400'); }));
+                ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('border-yellow-400'); }));
+
+                dropzone.addEventListener('drop', (e) => {
+                    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+                    if (f) {
+                        // Assign files to the hidden input so existing logic handles it
+                        fileInput.files = e.dataTransfer.files;
+                        if (fileNameEl) fileNameEl.innerText = f.name;
+                        // Trigger change handler manually
+                        const ev = new Event('change');
+                        fileInput.dispatchEvent(ev);
+                    }
+                });
+            }
+        }
+
+        // --- PRESET MANAGEMENT ---
+
+        function loadCharacters() {
+            const saved = localStorage.getItem('e621_pro_characters');
+            if (saved) {
+                try {
+                    // Load saved characters, if parsing fails, use initial empty state.
+                    savedCharacters = JSON.parse(saved);
+                } catch (e) {
+                    savedCharacters = {}; 
+                    saveCharacters();
+                }
+            } else {
+                // If nothing saved, use the initial empty state.
+                savedCharacters = {}; 
+                saveCharacters();
+            }
+        }
+
+        function saveCharacters() {
+            try {
+                localStorage.setItem('e621_pro_characters', JSON.stringify(savedCharacters));
+            } catch (e) {
+                if (e.name === 'QuotaExceededError') {
+                    showToast("Storage limit exceeded! Try deleting characters or using smaller images.", true);
+                } else {
+                    showToast("Storage error: " + e.message, true);
+                }
+                console.error("Storage error", e);
+            }
+        }
+
+        function resetCharactersToDefault() {
+            // Confirm dialog replaced with custom modal/toast logic for iframe compatibility, 
+            // but for simplicity and following the rule "Do NOT use confirm()", we use a prompt
+            // or an aggressive single-click reset with a confirmation UI (like in deleteCharacter).
+            // Here, we just do a direct reset since the user requested it empty anyway.
+            
+            // Using a temporary button state to mimic confirmation without using window.confirm
+            const btn = document.querySelector('#charModal button[onclick="resetCharactersToDefault()"]');
+            if (btn && btn.dataset.confirm !== "true") {
+                btn.dataset.confirm = "true";
+                const originalText = btn.innerHTML;
+                btn.innerHTML = "Are you SURE?";
+                btn.classList.add('bg-red-700');
+                
+                setTimeout(() => {
+                    if (document.body.contains(btn) && btn.dataset.confirm === "true") {
+                         btn.dataset.confirm = "false";
+                         btn.innerHTML = originalText;
+                         btn.classList.remove('bg-red-700');
+                    }
+                }, 3000);
+                return;
+            }
+
+            savedCharacters = JSON.parse(JSON.stringify(INITIAL_CHARACTERS)); // Should be {}
+            saveCharacters();
+            renderCharacterList();
+            updatePresetDropdown(currentMode);
+            updateCharacterDisplay();
+            showToast("All characters have been cleared.");
+            
+            if (btn) {
+                btn.dataset.confirm = "false";
+                btn.innerHTML = "Reset to Factory Defaults (Clear All)";
+                btn.classList.remove('bg-red-700');
+            }
+        }
+
+        function updatePresetDropdown(mode) {
+            currentMode = mode;
+            document.getElementById('modeIndicator').innerText = mode === 'duo' ? 'Duo' : 'Solo';
+
+            const select = document.getElementById('characterSelect');
+            select.innerHTML = '<option value="">-- No Character (Tags Only) --</option>';
+
+            const keys = Object.keys(savedCharacters);
+            const filteredKeys = keys.filter(key => {
+                const char = savedCharacters[key];
+                const charType = char.type || 'solo';
+                return charType === mode;
+            });
+
+            if (filteredKeys.length === 0) {
+                 const opt = document.createElement('option');
+                 opt.disabled = true;
+                 opt.innerText = `No ${mode} presets found.`;
+                 select.appendChild(opt);
+                 return;
+            }
+
+            filteredKeys.forEach(key => {
+                const char = savedCharacters[key];
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.innerText = char.name;
+                select.appendChild(opt);
+            });
+
+            if (select.options.length > 1) {
+                select.selectedIndex = 1; // Select the first actual character
+            }
+        }
+
+        // Helper to read and COMPRESS file
+        function compressImage(file, maxWidth = 150, quality = 0.6) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const elem = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > maxWidth) {
+                            height *= maxWidth / width;
+                            width = maxWidth;
+                        }
+
+                        elem.width = width;
+                        elem.height = height;
+                        const ctx = elem.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        
+                        // Force JPEG for compression, standard quality
+                        resolve(elem.toDataURL('image/jpeg', quality));
+                    };
+                    img.onerror = (error) => reject(error);
+                };
+                reader.onerror = (error) => reject(error);
+            });
+        }
+
+        async function saveCharacter() {
+            const nameInput = document.getElementById('newCharName');
+            const tagsInput = document.getElementById('newCharTags');
+            const typeInput = document.getElementById('newCharType');
+            const urlInput = document.getElementById('newCharUrl');
+            const imgUrlInput = document.getElementById('newCharImgUrl');
+            const fileInput = document.getElementById('newCharFile');
+            
+            const name = nameInput.value.trim();
+            const tags = tagsInput.value.trim();
+            const type = typeInput.value;
+            const refUrl = urlInput.value.trim();
+            let imgSrc = imgUrlInput.value.trim();
+
+            if (!name || !tags) {
+                showToast("Please fill in Name and Prompt!", true); 
+                return;
+            }
+
+            // Handle File Upload with COMPRESSION
+            if (fileInput.files && fileInput.files[0]) {
+                try {
+                    // Compress to max 150px width
+                    imgSrc = await compressImage(fileInput.files[0], 150, 0.6);
+                } catch (e) {
+                    showToast("Error processing image", true);
+                    return;
+                }
+            }
+
+            // If editing, preserve existing image if no new one provided
+            if (editingCharId && !imgSrc && !fileInput.files.length && !imgUrlInput.value) {
+                // Keep old image
+                imgSrc = savedCharacters[editingCharId].image || '';
+            }
+
+            const charData = { 
+                name, 
+                tags, 
+                type, 
+                url: refUrl,
+                image: imgSrc
+            };
+
+            let action = '';
+            if (editingCharId) {
+                savedCharacters[editingCharId] = charData;
+                action = 'updated';
+            } else {
+                const id = 'char_' + Date.now();
+                savedCharacters[id] = charData;
+                action = 'added';
+            }
+            
+            saveCharacters();
+            cancelEdit(); // Reset form
+            
+            renderCharacterList();
+            // Only update dropdown if the saved character belongs to the current mode
+            if (type === currentMode) {
+                updatePresetDropdown(currentMode);
+                updateCharacterDisplay(); 
+            }
+            // Notify after saving and UI updates
+            showToast(`Character ${action}!`);
+        }
+
+        function editCharacter(id) {
+            const char = savedCharacters[id];
+            if (!char) return;
+
+            // Populate form
+            document.getElementById('newCharName').value = char.name;
+            document.getElementById('newCharTags').value = char.tags;
+            document.getElementById('newCharType').value = char.type || 'solo';
+            document.getElementById('newCharUrl').value = char.url || '';
+            document.getElementById('newCharImgUrl').value = ''; // Reset input text
+            document.getElementById('newCharFile').value = ''; // Reset file input
+
+            // Show preview of existing image
+            const previewBox = document.getElementById('formImgPreview');
+            const previewImg = previewBox.querySelector('img');
+            if (char.image) {
+                if(!char.image.startsWith('data:')) {
+                     document.getElementById('newCharImgUrl').value = char.image;
+                }
+                previewImg.src = char.image;
+                previewBox.classList.remove('hidden');
+            } else {
+                previewBox.classList.add('hidden');
+            }
+
+            // Change UI State
+            editingCharId = id;
+            document.getElementById('formTitle').innerText = "Edit Character";
+            document.getElementById('saveCharBtn').innerHTML = '<i class="fas fa-save"></i> Update Character';
+            document.getElementById('cancelEditBtn').classList.remove('hidden');
+
+            const formContainer = document.getElementById('charFormContainer');
+            if(formContainer) formContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function cancelEdit() {
+            // Reset fields
+            document.getElementById('newCharName').value = '';
+            document.getElementById('newCharTags').value = '';
+            document.getElementById('newCharType').value = 'solo';
+            document.getElementById('newCharUrl').value = '';
+            document.getElementById('newCharImgUrl').value = '';
+            document.getElementById('newCharFile').value = '';
+            document.getElementById('formImgPreview').classList.add('hidden');
+
+            // Reset UI State
+            editingCharId = null;
+            document.getElementById('formTitle').innerText = "Add New Character";
+            document.getElementById('saveCharBtn').innerHTML = '<i class="fas fa-plus"></i> Add Character';
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+        }
+
+        function deleteCharacter(id, btn) {
+            if (editingCharId === id) {
+                cancelEdit();
+            }
+
+            // Using custom confirmation UI instead of window.confirm
+            if (btn.dataset.confirm === "true") {
+                delete savedCharacters[id];
+                saveCharacters();
+                renderCharacterList();
+                updatePresetDropdown(currentMode);
+                updateCharacterDisplay();
+                showToast("Character deleted.");
+            } else {
+                btn.dataset.confirm = "true";
+                const originalHTML = btn.innerHTML;
+                const originalClasses = btn.className;
+                
+                btn.className = "bg-red-600 text-white p-2 rounded text-xs font-bold w-16 transition";
+                btn.innerHTML = "Sure?";
+                
+                setTimeout(() => {
+                    if (document.body.contains(btn)) {
+                        btn.dataset.confirm = "false";
+                        btn.innerHTML = originalHTML;
+                        btn.className = originalClasses;
+                    }
+                }, 3000);
+            }
+        }
+
+        // --- UI FUNCTIONS ---
+
+        function openCharManager() {
+            renderCharacterList();
+            cancelEdit(); 
+            document.getElementById('charModal').classList.remove('hidden');
+        }
+
+        function closeCharManager() {
+            document.getElementById('charModal').classList.add('hidden');
+        }
+
+        function renderCharacterList() {
+            const listEl = document.getElementById('customCharList');
+            listEl.innerHTML = '';
+
+            const keys = Object.keys(savedCharacters);
+            if (keys.length === 0) {
+                listEl.innerHTML = '<p class="text-xs text-gray-500 italic text-center py-2">No characters saved.</p>';
+                return;
+            }
+
+            keys.forEach(key => {
+                const char = savedCharacters[key];
+                const typeLabel = (char.type === 'duo') ? 
+                    '<span class="text-xs bg-purple-600 text-white px-1 rounded ml-2">DUO</span>' : 
+                    '<span class="text-xs bg-blue-600 text-white px-1 rounded ml-2">SOLO</span>';
+                
+                const urlHtml = char.url ? 
+                    `<a href="${char.url}" target="_blank" class="text-blue-300 hover:text-white ml-2" title="Open Reference">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>` : '';
+
+                // Image Thumbnail
+                let thumbHtml = '';
+                if (char.image) {
+                    thumbHtml = `<img src="${char.image}" class="char-thumb mr-3" alt="char">`;
+                } else {
+                    thumbHtml = `<div class="char-thumb mr-3 flex items-center justify-center bg-gray-800 text-gray-500"><i class="fas fa-user"></i></div>`;
+                }
+
+                const item = document.createElement('div');
+                item.className = "flex justify-between items-center bg-[#1f3c67] p-2 rounded border border-[#2e76b4]";
+                item.innerHTML = `
+                    <div class="flex items-center w-full overflow-hidden">
+                        ${thumbHtml}
+                        <div class="truncate mr-2 flex-grow">
+                            <div class="text-sm font-bold text-white flex items-center">
+                                ${char.name} ${typeLabel} ${urlHtml}
+                            </div>
+                            <div class="text-xs text-gray-400 truncate w-full pr-4">${char.tags}</div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 flex-shrink-0">
+                         <button onclick="editCharacter('${key}')" class="text-yellow-400 hover:text-yellow-300 p-2 hover:bg-yellow-900/30 rounded transition w-10 h-10 flex items-center justify-center" title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="deleteCharacter('${key}', this)" class="text-red-400 hover:text-red-300 p-2 hover:bg-red-900/30 rounded transition w-10 h-10 flex items-center justify-center" title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                listEl.appendChild(item);
+            });
+        }
+        
+        // Function to update the selected character display card
+        function updateCharacterDisplay() {
+            const select = document.getElementById('characterSelect');
+            const charCard = document.getElementById('characterInfoCard');
+            const charImageContainer = document.getElementById('charImagePreview');
+            const charName = document.getElementById('charNameDisplay');
+            const refButton = document.getElementById('charRefButton');
+
+            // Reset state
+            charCard.classList.add('hidden');
+            refButton.classList.add('hidden');
+            charImageContainer.innerHTML = '';
+            charName.innerText = '---';
+
+            const charId = select.value;
+            if (charId && savedCharacters[charId]) {
+                const char = savedCharacters[charId];
+                
+                charCard.classList.remove('hidden');
+                charName.innerText = char.name;
+
+                // Display character image
+                if (char.image) {
+                    charImageContainer.innerHTML = `<img src="${char.image}" alt="${char.name} image" class="object-contain max-h-full max-w-full rounded">`;
+                } else {
+                    charImageContainer.innerHTML = `<div class="text-gray-500 text-sm">No Image</div>`;
+                }
+                
+                // Reference button
+                if (char.url) {
+                    refButton.classList.remove('hidden');
+                } else {
+                    refButton.classList.add('hidden');
+                }
+            }
+        }
+
+        function openCharacterReference() {
+            const select = document.getElementById('characterSelect');
+            const charId = select.value;
+            if (charId && savedCharacters[charId] && savedCharacters[charId].url) {
+                window.open(savedCharacters[charId].url, '_blank');
+            }
+        }
+
+        // Add change event listener for character selection
+        document.getElementById('characterSelect').addEventListener('change', updateCharacterDisplay);
+
+
+        // --- BLACKLIST SETTINGS ---
+        
+        function loadSettings() {
+            const saved = localStorage.getItem('e621_blacklist');
+            if (saved) {
+                try {
+                    currentBannedList = JSON.parse(saved);
+                } catch (e) {
+                    // If corrupted, use the empty default list as requested by the user
+                    currentBannedList = [];
+                }
+            } else {
+                // If nothing saved, use the empty default list
+                currentBannedList = [];
+            }
+
+            // Load category settings
+            const categoriesSaved = localStorage.getItem('e621_categories');
+            if (categoriesSaved) {
+                try {
+                    enabledCategories = JSON.parse(categoriesSaved);
+                } catch (e) {
+                    enabledCategories = { general: true, artists: true, species: true, meta: true };
+                }
+            } else {
+                enabledCategories = { general: true, artists: true, species: true, meta: true };
+            }
+        }
+
+        function openSettings() {
+            const textarea = document.getElementById('blacklistInput');
+            textarea.value = currentBannedList.join(', ');
+            
+            // Update checkbox states for categories
+            document.getElementById('catGeneral').checked = enabledCategories.general;
+            document.getElementById('catArtists').checked = enabledCategories.artists;
+            document.getElementById('catSpecies').checked = enabledCategories.species;
+            document.getElementById('catMeta').checked = enabledCategories.meta;
+            
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+
+        function saveSettings() {
+            const textarea = document.getElementById('blacklistInput');
+            const rawText = textarea.value;
+            const newArray = rawText.split(',')
+                .map(s => s.trim().toLowerCase().replace(/\s+/g, '_')) 
+                .filter(s => s.length > 0);
+
+            currentBannedList = newArray;
+            localStorage.setItem('e621_blacklist', JSON.stringify(currentBannedList));
+
+            // Save category settings
+            enabledCategories = {
+                general: document.getElementById('catGeneral').checked,
+                artists: document.getElementById('catArtists').checked,
+                species: document.getElementById('catSpecies').checked,
+                meta: document.getElementById('catMeta').checked
+            };
+            localStorage.setItem('e621_categories', JSON.stringify(enabledCategories));
+
+            closeSettings();
+            showToast("Settings Saved!");
+            
+            // Re-fetch tags if results are currently displayed to apply new filter
+            if (!document.getElementById('resultsArea').classList.contains('hidden')) {
+                fetchTags();
+            }
+        }
+
+        function resetDefaultBlacklist() {
+            // Reset to the configured default, which is empty as requested by the user
+            document.getElementById('blacklistInput').value = DEFAULT_BANNED_SUFFIXES.join(', ');
+            showToast("Blacklist input cleared.");
+        }
+
+        // --- MIKUS IMPORT/EXPORT ---
+
+        async function ensureJSZip() {
+            if (window.JSZip) return window.JSZip;
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+                s.onload = () => resolve(window.JSZip);
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
+        }
+
+        async function exportMikus() {
+            try {
+                const JSZip = await ensureJSZip();
+                const zip = new JSZip();
+
+                // negative.txt from currentBannedList
+                const neg = (currentBannedList || []).join(', ');
+                zip.file('negative.txt', neg);
+
+                // characher.json -> savedCharacters
+                // Ensure images are data URLs; if image is an external URL, keep as-is but warn user
+                const charCopy = {};
+                for (const id of Object.keys(savedCharacters)) {
+                    const c = savedCharacters[id];
+                    charCopy[c.name] = {
+                        type: c.type || 'solo',
+                        img: c.image || '',
+                        ref_url: c.url || '',
+                        prompt: c.tags || ''
+                    };
+                }
+                zip.file('characher.json', JSON.stringify(charCopy, null, 2));
+
+                const content = await zip.generateAsync({ type: 'blob' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(content);
+                a.download = 'export.mikus';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                showToast('Exported .mikus');
+            } catch (e) {
+                console.error(e);
+                showToast('Export failed', true);
+            }
+        }
+
+        async function handleImportMikus() {
+            const input = document.getElementById('importMikusFile');
+            if (!input || !input.files || !input.files[0]) { showToast('Select a .mikus file first', true); return; }
+            const file = input.files[0];
+
+            try {
+                const JSZip = await ensureJSZip();
+                const data = await file.arrayBuffer();
+                const zip = await JSZip.loadAsync(data);
+
+                // negative.txt
+                if (zip.file('negative.txt')) {
+                    const negText = await zip.file('negative.txt').async('string');
+                    const arr = negText.split(',').map(s => s.trim().toLowerCase().replace(/\s+/g,'_')).filter(s=>s);
+                    currentBannedList = arr;
+                    localStorage.setItem('e621_blacklist', JSON.stringify(currentBannedList));
+                }
+
+                // characher.json
+                if (zip.file('characher.json')) {
+                    const jsonText = await zip.file('characher.json').async('string');
+                    try {
+                        const parsed = JSON.parse(jsonText);
+                        // Convert back to savedCharacters structure
+                        const newChars = {};
+                        for (const name of Object.keys(parsed)) {
+                            const entry = parsed[name];
+                            const id = 'char_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+                            newChars[id] = {
+                                name,
+                                tags: entry.prompt || '',
+                                type: entry.type || 'solo',
+                                url: entry.ref_url || '',
+                                image: entry.img || ''
+                            };
+                        }
+                        savedCharacters = newChars;
+                        saveCharacters();
+                        renderCharacterList();
+                        updatePresetDropdown(currentMode);
+                        updateCharacterDisplay();
+                    } catch (e) {
+                        console.error('Invalid characher.json', e);
+                        showToast('Invalid characher.json', true);
+                    }
+                }
+
+                showToast('Imported .mikus');
+                // Clear file input
+                input.value = '';
+            } catch (e) {
+                console.error(e);
+                showToast('Import failed', true);
+            }
+        }
+
+        // --- MAIN LOGIC ---
+
+        // --- Dropzone wiring ---
+        (function setupMikusDropzone() {
+            const drop = document.getElementById('mikusDropzone');
+            const input = document.getElementById('importMikusFile');
+            const nameEl = document.getElementById('mikusFileName');
+
+            if (!drop || !input) return;
+
+            drop.addEventListener('click', () => input.click());
+
+            input.addEventListener('change', () => {
+                if (input.files && input.files[0]) {
+                    nameEl.innerText = input.files[0].name;
+                } else {
+                    nameEl.innerText = '';
+                }
+            });
+
+            ['dragenter','dragover'].forEach(ev => {
+                drop.addEventListener(ev, (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    drop.classList.add('border-yellow-400');
+                });
+            });
+            ['dragleave','drop'].forEach(ev => {
+                drop.addEventListener(ev, (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    drop.classList.remove('border-yellow-400');
+                });
+            });
+
+            drop.addEventListener('drop', (e) => {
+                const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+                if (f) {
+                    input.files = e.dataTransfer.files; // assign files
+                    nameEl.innerText = f.name;
+                }
+            });
+        })();
+
+        async function fetchTags() {
+            const input = document.getElementById('urlInput').value.trim();
+            const errorDiv = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
+            const loading = document.getElementById('loadingSpinner');
+            const results = document.getElementById('resultsArea');
+            const tagsContainer = document.getElementById('tagsContainer');
+            const duoMessage = document.getElementById('duoMessage');
+            const imgPreview = document.getElementById('postImage');
+            const imgPlaceholder = document.getElementById('imagePlaceholder');
+            
+            errorDiv.classList.add('hidden');
+            results.classList.add('hidden');
+            tagsContainer.innerHTML = '';
+            duoMessage.classList.add('hidden');
+            imgPreview.classList.add('hidden');
+            imgPreview.src = '';
+            imgPlaceholder.classList.remove('hidden');
+            
+            const characterSelect = document.getElementById('characterSelect');
+            characterSelect.disabled = false;
+            // Reset selection to prevent errors until mode is determined
+            characterSelect.value = ''; 
+
+            if (!input) {
+                showError("Please enter a URL.");
+                return;
+            }
+
+            const idMatch = input.match(/posts\/(\d+)/);
+            if (!idMatch) {
+                showError("Post ID not found. Format: e621.net/posts/XXXXX");
+                return;
+            }
+            const postId = idMatch[1];
+            document.getElementById('postIdDisplay').innerText = postId;
+
+            loading.classList.remove('hidden');
+
+            try {
+                let e621Data;
+                const apiUrl = `https://e621.net/posts/${postId}.json`;
+                
+                // Using proxies for CORS
+                try {
+                    const proxyUrl1 = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
+                    const res1 = await fetch(proxyUrl1);
+                    if (!res1.ok) throw new Error();
+                    const data1 = await res1.json();
+                    e621Data = JSON.parse(data1.contents);
+                } catch (err1) {
+                    console.warn("Proxy 1 failed, trying backup...");
+                    const proxyUrl2 = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(apiUrl)}`;
+                    const res2 = await fetch(proxyUrl2);
+                    if (!res2.ok) throw new Error("Failed to load post data. e621 or Proxy may be down.");
+                    e621Data = await res2.json();
+                }
+
+                if (!e621Data || !e621Data.post) throw new Error("Post data not found.");
+
+                const post = e621Data.post;
+                const imgUrl = post.sample.url || post.file.url || post.preview.url;
+                if (imgUrl) {
+                    imgPreview.src = imgUrl;
+                    imgPreview.onload = () => {
+                        imgPreview.classList.remove('hidden');
+                        imgPlaceholder.classList.add('hidden');
+                    };
+                    imgPreview.onerror = () => {
+                         imgPlaceholder.innerText = "Image Unavailable";
+                    };
+                } else {
+                    imgPlaceholder.innerText = "No Image";
+                }
+
+                let generalTags = post.tags.general || [];
+                if (generalTags.length === 0) throw new Error("No General tags found.");
+
+                const isDuo = generalTags.includes('duo');
+                
+                if (isDuo) {
+                    updatePresetDropdown('duo');
+                    duoMessage.classList.remove('hidden');
+                } else {
+                    updatePresetDropdown('solo');
+                }
+
+                // IMPORTANT: Update character display after mode is set and selection is made
+                updateCharacterDisplay();
+
+                // Filter tags by category
+                let filteredTags = [];
+                
+                if (enabledCategories.general && post.tags.general) {
+                    filteredTags.push(...post.tags.general);
+                }
+                if (enabledCategories.artists && post.tags.artist) {
+                    filteredTags.push(...post.tags.artist);
+                }
+                if (enabledCategories.species && post.tags.species) {
+                    filteredTags.push(...post.tags.species);
+                }
+                if (enabledCategories.meta && post.tags.meta) {
+                    filteredTags.push(...post.tags.meta);
+                }
+
+                // Apply blacklist filter
+                generalTags = filteredTags.filter(tag => {
+                    const lowerTag = tag.toLowerCase();
+                    const tagParts = lowerTag.split('_');
+                    
+                    // Filter based on the current blacklist
+                    for (const banned of currentBannedList) {
+                        if (lowerTag === banned) return false;
+                        if (lowerTag.endsWith('_' + banned)) return false;
+                        if (tagParts.includes(banned)) return false;
+                    }
+                    
+                    // Simple filter for common color tags (can be added to blacklist if user wants)
+                    const commonColors = ['blue', 'red', 'green', 'yellow', 'black', 'white', 'orange', 'purple', 'pink', 'brown', 'grey', 'gray', 'blonde', 'silver', 'gold'];
+                    if (commonColors.includes(lowerTag)) return false;
+
+                    return true;
+                });
+
+                generalTags.sort();
+                document.getElementById('tagCount').innerText = generalTags.length;
+
+                generalTags.forEach(tag => {
+                    const displayTag = tag.replace(/_/g, ' ');
+                    const tagEl = document.createElement('div');
+                    tagEl.className = "tag-pill bg-[#1f3c67] border border-blue-400 text-blue-100 px-3 py-1 rounded text-sm font-medium select-none flex items-center gap-2";
+                    tagEl.innerHTML = `<span class="truncate">${displayTag}</span>`;
+                    tagEl.dataset.copyText = displayTag;
+                    tagEl.onclick = function() {
+                        copyText(displayTag);
+                        visualCopyEffect(tagEl, displayTag);
+                    };
+                    tagsContainer.appendChild(tagEl);
+                });
+
+                results.classList.remove('hidden');
+
+            } catch (err) {
+                console.error(err);
+                showError(err.message);
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+
+        // --- UTIL: copy and toast helpers ---
+        function fallbackCopy(text) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            ta.setAttribute('readonly', '');
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                document.execCommand('copy');
+                showToast('Copied!');
+            } catch (err) {
+                console.error('Copy failed', err);
+                showToast('Copy failed', true);
+            }
+            document.body.removeChild(ta);
+        }
+
+        function copyText(text) {
+            if (!text) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showToast('Copied!')).catch(() => fallbackCopy(text));
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function visualCopyEffect(el, text) {
+            if (!el) return;
+            const original = el.innerHTML;
+            el.classList.add('copied');
+            el.innerHTML = `<i class="fas fa-check text-xs"></i> <span class="truncate">${text}</span>`;
+            setTimeout(() => {
+                el.classList.remove('copied');
+                el.innerHTML = original;
+            }, 1000);
+        }
+
+        function copyAllTags() {
+            const tagElements = document.querySelectorAll('#tagsContainer .tag-pill');
+            let tagsList = [];
+            tagElements.forEach(el => tagsList.push(el.dataset.copyText));
+            if (tagsList.length === 0) { showToast('No tags to copy!', true); return; }
+            const tagsString = tagsList.join(', ');
+            const selectEl = document.getElementById('characterSelect');
+            const val = selectEl ? selectEl.value : '';
+            let finalString = tagsString;
+            if (val && savedCharacters[val]) {
+                finalString = `${savedCharacters[val].tags}, BREAK, ${tagsString}`;
+            }
+            copyText(finalString);
+        }
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            const msg = document.getElementById('toastMsg');
+            // Reset base classes
+            toast.className = "fixed bottom-5 right-5 text-white px-6 py-3 rounded-lg shadow-xl transform translate-y-20 opacity-0 transition duration-300 z-50 flex items-center gap-2";
+            if (isError) {
+                toast.classList.add('bg-red-700');
+                msg.innerHTML = '<i class="fas fa-exclamation-circle"></i> ' + message;
+            } else {
+                toast.classList.add('bg-green-600');
+                msg.innerHTML = '<i class="fas fa-check-circle"></i> ' + message;
+            }
+            // Show
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
+        }
+
+        function clearResults() {
+            document.getElementById('resultsArea').classList.add('hidden');
+            document.getElementById('urlInput').value = '';
+            // Reset character display on clear
+            document.getElementById('characterInfoCard').classList.add('hidden'); 
+            document.getElementById('urlInput').focus();
+        }
+
+        document.getElementById('urlInput').addEventListener("keypress", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); fetchTags(); }
+        });
+
+    // Prevent default browser behavior of opening files when dropped outside the dropzones
+    document.addEventListener('dragover', function(e) { e.preventDefault(); }, false);
+    document.addEventListener('drop', function(e) { e.preventDefault(); }, false);
+
+    </script>
+</body>
+</html>
